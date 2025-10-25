@@ -43,7 +43,6 @@ export function CityDetails({ cityName, countyName, onBack, onOpenChat }: CityDe
             <MapPin className="w-8 h-8" />
             {cityName}, Florida
           </h1>
-          <p className="text-[#c9d4bc] text-sm mt-1">Located in {countyName} County</p>
         </div>
 
         {/* Content */}
@@ -72,8 +71,8 @@ export function CityDetails({ cityName, countyName, onBack, onOpenChat }: CityDe
                           <p className="text-[#5a5a4a] text-xs">{type.name}</p>
                         </div>
                         <div className="flex items-center gap-1 bg-[#7a8c6f] text-[#e8e8d8] px-3 py-1 rounded-full">
-                          <DollarSign className="w-4 h-4" />
-                          <span className="text-sm">{rate}</span>
+                          {/* <DollarSign className="w-4 h-4" /> */}
+                          <span className="text-m">{rate}</span>
                         </div>
                       </div>
                       <p className="text-[#6b7b5f] text-xs leading-relaxed">{type.description}</p>
