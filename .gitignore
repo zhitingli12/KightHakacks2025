@@ -22,9 +22,9 @@ app-backend/multi-tool-agent/*.py[cod]
 node_modules/
 package.json
 package-lock.json
-app-frontend/node_modules/
-app-frontend/package.json
-app-frontend/package-lock.json
+frontend/node_modules/
+frontend/package.json
+frontend/package-lock.json
 
 # --- System / Editor Files ---
 .DS_Store
