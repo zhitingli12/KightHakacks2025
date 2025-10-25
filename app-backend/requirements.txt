@@ -2,3 +2,10 @@ fastapi
 google-adk
 pydantic
 uvicorn
+google-genai
+google-cloud-aiplatform
+pandas
+osmnx
+requests
+geopandas
+shapely
