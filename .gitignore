@@ -16,6 +16,8 @@ app-backend/multi-tool-agent/*.py[cod]
 
 *.pyc
 
+*.json
+
 # --- Node / Frontend ---
 node_modules/
 package.json
