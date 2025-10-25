@@ -11,6 +11,11 @@ app-backend/.coverage
 app-backend/.vscode/
 app-backend/.idea/
 
+app-backend/multi-tool-agent/__pycache__/
+app-backend/multi-tool-agent/*.py[cod]
+
+*.pyc
+
 # --- System / Editor Files ---
 .DS_Store
 Thumbs.db
