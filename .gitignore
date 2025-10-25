@@ -16,6 +16,14 @@ app-backend/multi-tool-agent/*.py[cod]
 
 *.pyc
 
+# --- Node / Frontend ---
+node_modules/
+package.json
+package-lock.json
+app-frontend/node_modules/
+app-frontend/package.json
+app-frontend/package-lock.json
+
 # --- System / Editor Files ---
 .DS_Store
 Thumbs.db
