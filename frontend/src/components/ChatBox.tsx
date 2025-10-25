@@ -127,7 +127,7 @@ export function ChatBox() {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="type your message..."
+            placeholder="Type your message..."
             className="flex-1 bg-[#f5f5e8] border-3 border-[#a0a089] focus:border-[#7a8c6f] rounded-full px-5 h-12 text-[#4a5a3f] placeholder:text-[#a0a089] shadow-inner"
           />
           <Button
