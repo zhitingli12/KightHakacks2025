@@ -5,3 +5,7 @@ uvicorn
 google-genai
 google-cloud-aiplatform
 pandas
+osmnx
+requests
+geopandas
+shapely
