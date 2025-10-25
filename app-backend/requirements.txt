@@ -4,3 +4,4 @@ pydantic
 uvicorn
 google-genai
 google-cloud-aiplatform
+pandas
