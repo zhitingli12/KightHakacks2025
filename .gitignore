@@ -1,0 +1,25 @@
+# --- Python / Backend ---
+app-backend/__pycache__/
+app-backend/*.py[cod]
+app-backend/venv/
+app-backend/.env
+app-backend/.DS_Store
+app-backend/*.log
+app-backend/.pytest_cache/
+app-backend/.mypy_cache/
+app-backend/.coverage
+app-backend/.vscode/
+app-backend/.idea/
+
+# --- System / Editor Files ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# --- Environment / Credentials ---
+.env
+*.pem
+*.key
