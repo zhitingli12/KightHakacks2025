@@ -386,8 +386,8 @@ export default function App() {
                 <button
                   onClick={() => setActiveTab('map')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all ${activeTab === 'map'
-                      ? 'bg-[#7a8c6f] border-[#5a5a4a] text-[#e8e8d8] shadow-md'
-                      : 'bg-[#e8e8d8] border-[#a0a089] text-[#4a5a3f] hover:bg-[#d4d4c4]'
+                    ? 'bg-[#7a8c6f] border-[#5a5a4a] text-[#e8e8d8] shadow-md'
+                    : 'bg-[#e8e8d8] border-[#a0a089] text-[#4a5a3f] hover:bg-[#d4d4c4]'
                     }`}
                 >
                   <Map className="w-4 h-4" />
@@ -396,8 +396,8 @@ export default function App() {
                 <button
                   onClick={() => setActiveTab('list')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all ${activeTab === 'list'
-                      ? 'bg-[#7a8c6f] border-[#5a5a4a] text-[#e8e8d8] shadow-md'
-                      : 'bg-[#e8e8d8] border-[#a0a089] text-[#4a5a3f] hover:bg-[#d4d4c4]'
+                    ? 'bg-[#7a8c6f] border-[#5a5a4a] text-[#e8e8d8] shadow-md'
+                    : 'bg-[#e8e8d8] border-[#a0a089] text-[#4a5a3f] hover:bg-[#d4d4c4]'
                     }`}
                 >
                   <List className="w-4 h-4" />
@@ -406,8 +406,8 @@ export default function App() {
                 <button
                   onClick={() => setActiveTab('chat')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all ${activeTab === 'chat'
-                      ? 'bg-[#7a8c6f] border-[#5a5a4a] text-[#e8e8d8] shadow-md'
-                      : 'bg-[#e8e8d8] border-[#a0a089] text-[#4a5a3f] hover:bg-[#d4d4c4]'
+                    ? 'bg-[#7a8c6f] border-[#5a5a4a] text-[#e8e8d8] shadow-md'
+                    : 'bg-[#e8e8d8] border-[#a0a089] text-[#4a5a3f] hover:bg-[#d4d4c4]'
                     }`}
                 >
                   <MessageSquare className="w-4 h-4" />

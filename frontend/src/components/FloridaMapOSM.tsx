@@ -210,7 +210,7 @@ export function FloridaMapOSM({
                 </div>
             </div>
 
-            {/* Display clicked coordinates on screen */}
+            {/* Display clicked coordinates on screen
             {clickedCoords && (
                 <div className="absolute bottom-4 left-4 z-[1000] bg-[#e8e8d8] border-2 border-[#5a5a4a] rounded-lg px-4 py-2 shadow-lg">
                     <div className="text-xs text-[#4a5a3f]">
@@ -219,7 +219,7 @@ export function FloridaMapOSM({
                         <div>Lng: {clickedCoords.lng.toFixed(6)}</div>
                     </div>
                 </div>
-            )}
+            )} */}
 
             <div className="rounded-2xl overflow-hidden border-4 border-[#5a5a4a] shadow-2xl">
                 <div style={{ height: '600px', width: '100%' }}>
@@ -238,13 +238,13 @@ export function FloridaMapOSM({
                         />
 
                         {/* Show county marker */}
-                        {selectedCounty && (
+                        {/* {selectedCounty && (
                             <CircleMarker
                                 center={[selectedCounty.lat, selectedCounty.lng]}
                                 pathOptions={{
                                     fillColor: '#d4a574',
                                     color: '#5a5a4a',
-                                    weight: 2,
+                                    weight: 10,
                                     opacity: 1,
                                     fillOpacity: 0.8,
                                     radius: 8,
@@ -260,7 +260,7 @@ export function FloridaMapOSM({
                                     </div>
                                 </Popup>
                             </CircleMarker>
-                        )}
+                        )} */}
 
                         {/* Show clicked location marker */}
                         {clickedCoords && (
@@ -275,7 +275,7 @@ export function FloridaMapOSM({
                                     radius: 6,
                                 }}
                             >
-                                <Popup>
+                                {/* <Popup>
                                     <div className="text-center">
                                         <strong style={{ color: '#4a5a3f' }}>Clicked Location</strong>
                                         <br />
@@ -283,12 +283,12 @@ export function FloridaMapOSM({
                                             {clickedCoords.lat.toFixed(4)}, {clickedCoords.lng.toFixed(4)}
                                         </span>
                                     </div>
-                                </Popup>
+                                </Popup> */}
                             </CircleMarker>
                         )}
 
                         {/* Show city markers when in county view */}
-                        {viewMode === 'county' && selectedCounty && selectedCounty.cities.map((city) => (
+                        {/* {viewMode === 'county' && selectedCounty && selectedCounty.cities.map((city) => (
                             <CircleMarker
                                 key={city.name}
                                 center={[city.lat, city.lng]}
@@ -316,7 +316,7 @@ export function FloridaMapOSM({
                                     </div>
                                 </Popup>
                             </CircleMarker>
-                        ))}
+                        ))} */}
                     </MapContainer>
                 </div>
             </div>
