@@ -237,24 +237,7 @@ export function FloridaMapOSM({
                 </div>
             </div>
 
-            {/* Legend */}
-            <div className="mt-4 bg-[#e8e8d8] border-2 border-[#5a5a4a] rounded-lg p-3">
-                <div className="text-xs text-[#4a5a3f] space-y-2">
-                    <div className="font-medium mb-2">Map Legend:</div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-[#4A90E2] border-2 border-white"></div>
-                        <span>Your Current Location</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-[#E74C3C] border-2 border-white"></div>
-                        <span>Selected Location (from backend)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-4 h-4 rounded-full bg-[#F39C12] border-2 border-white opacity-70"></div>
-                        <span>Clicked (loading...)</span>
-                    </div>
-                </div>
-            </div>
+            
         </div>
     );
 }

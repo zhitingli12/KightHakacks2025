@@ -336,10 +336,7 @@ export default function App() {
                     {/* Footer */}
                     <div className="p-4 bg-[#c9d4bc] border-t-4 border-[#a0a089] text-center">
                       <p className="text-sm text-[#6b7b5f]">
-                        Click anywhere on the map to get location details from the backend
-                      </p>
-                      <p className="text-xs text-[#6b7b5f] mt-1">
-                        Backend: {API_URL}
+                        Nuvona © 2025
                       </p>
                     </div>
                   </>
