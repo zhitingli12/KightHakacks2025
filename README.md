@@ -9,16 +9,18 @@ Second cd into app-backend/ to install all the python packages
 ```bash
 pip install -r requirements.txt
 ```
-to run backend
+To run backend
 ```bash
 cd app-backend
 ```
 ```bash
 python api.py or python3 api.py
 ```
-to run frontend
+To run frontend
+
 ```bash
 cd frontend
+```
 ```bash
 npm run dev
 ```
