@@ -87,18 +87,15 @@ export default function App() {
     setError(null);
 
     try {
-      const url = `${API_URL}/map-click`;
-      const body = { lat, lon };
+      const url = `${API_URL}/reverse-geocode?lat=${lat}&lon=${lon}&radius_km=25`;
 
       console.log('📤 Request URL:', url);
-      console.log('📤 Request Body:', JSON.stringify(body, null, 2));
 
       const response = await fetch(url, {
-        method: 'POST',
+        method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body)
+        }
       });
 
       console.log('📥 Response status:', response.status);
@@ -110,20 +107,22 @@ export default function App() {
         throw new Error(`HTTP ${response.status}: ${errorText}`);
       }
 
-      const data: LocationData = await response.json();
+      const data = await response.json();
       console.log('✅ Success! Data received:', JSON.stringify(data, null, 2));
 
-      // Update state with location info
+      // Update state with location info - data is now LocationResponse format
       setClickedLocation({
-        lat: data.clicked_location.lat,
-        lon: data.clicked_location.lon,
-        city: data.location_info.city || undefined,
-        county: data.location_info.county || undefined,
-        state: data.location_info.state || undefined,
-        country: data.location_info.country || undefined,
+        lat: data.latitude || lat,
+        lon: data.longitude || lon,
+        city: data.city || undefined,
+        county: data.county || undefined,
+        state: data.state || undefined,
+        country: data.country || undefined,
       });
 
-      setNearbyCities(data.nearby_cities || []);
+      // For now, set empty nearby cities since reverse-geocode doesn't return them
+      // You could make a separate call to get nearby cities if needed
+      setNearbyCities([]);
 
     } catch (error) {
       console.error('❌ ERROR in fetchLocationInfo:');

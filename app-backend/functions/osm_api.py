@@ -155,9 +155,6 @@ def list_available_cities(bbox=None):
         return []
     
     return sorted(all_cities['name'].tolist())
-
-
-# def reverse_geocode_coordinate(lat, lon, search_radius_km=50):
 #     """
 #     Takes coordinates and returns what country, state, county, and city the coordinate is in.
     

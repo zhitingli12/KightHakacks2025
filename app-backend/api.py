@@ -300,7 +300,7 @@ async def chat_with_agent(chat_message: ChatMessage):
 async def reverse_geocode(
     lat: float = Query(..., description = "Latitude of the location", ge = -90, le = 90),
     lon: float = Query(..., description = "Longitude of the location", ge = -180, le = 180),
-    radius_km: float = Query(25, description = "Radius in kilometers to search within", ge =1, le = 100),
+    radius_km: float = Query(25, description = "Radius in kilometers to search within", ge =1, le = 100), 
 ):
     """
     Convert coordinates to location information (country, state, county, city).
@@ -310,9 +310,61 @@ async def reverse_geocode(
     - **radius_km**: Search radius in kilometers (1-100)
     """
     try:
-        location_info = reverse_geocode_coordinate(lat, lon, radius_km)
-        return LocationResponse(**location_info)
+        print(f"DEBUG: Calling reverse_geocode_coordinate with lat={lat}, lon={lon}, radius_km={radius_km}")
+        raw_info = reverse_geocode_coordinate(lat, lon, radius_km=radius_km)
+        print(f"DEBUG: Successfully got raw location_info: {raw_info}")
+
+        # Defensive normalization: adapt different shapes that reverse_geocode_coordinate
+        # might return (various keys like 'coordinates', 'lat'/'lon', 'latitude'/'longitude').
+        if not raw_info or not isinstance(raw_info, dict):
+            print("DEBUG: reverse_geocode_coordinate returned empty or non-dict")
+            raise HTTPException(status_code=404, detail="Location not found for the given coordinates")
+
+        # Normalize string fields to non-None strings (Pydantic expects str)
+        city = raw_info.get('city') or raw_info.get('name') or ''
+        state = raw_info.get('state') or ''
+        county = raw_info.get('county') or ''
+        country = raw_info.get('country') or ''
+
+        # Normalize latitude/longitude from several possible structures
+        latitude = None
+        longitude = None
+
+        if 'latitude' in raw_info and 'longitude' in raw_info:
+            latitude = raw_info.get('latitude')
+            longitude = raw_info.get('longitude')
+        elif 'lat' in raw_info and ('lon' in raw_info or 'lng' in raw_info):
+            latitude = raw_info.get('lat')
+            longitude = raw_info.get('lon') or raw_info.get('lng')
+        elif 'coordinates' in raw_info and isinstance(raw_info['coordinates'], dict):
+            coords = raw_info['coordinates']
+            latitude = coords.get('lat') or coords.get('latitude')
+            longitude = coords.get('lon') or coords.get('lng') or coords.get('longitude')
+
+        # Fallback to the input coordinates if we couldn't extract any
+        if latitude is None or longitude is None:
+            try:
+                latitude = float(lat)
+                longitude = float(lon)
+            except Exception:
+                raise HTTPException(status_code=500, detail="Could not determine latitude/longitude for response")
+
+        # Build normalized response that matches LocationResponse model
+        normalized = {
+            'city': city,
+            'state': state,
+            'county': county,
+            'country': country,
+            'latitude': float(latitude),
+            'longitude': float(longitude),
+            'location_info': raw_info
+        }
+
+        print(f"DEBUG: Normalized location response: {normalized}")
+        return LocationResponse(**normalized)
     except Exception as e:
+        print(f"DEBUG: Error in reverse_geocode_coordinate: {e}")
+        print(f"DEBUG: Error type: {type(e)}")
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.get("/city-boundary", response_model=CityBoundaryResponse)
@@ -415,7 +467,7 @@ async def user_location_workflow(
     """
     try:
         # Step 1: Reverse geocode user location
-        location_info = reverse_geocode_coordinate(lat, lon, search_radius_km)
+        location_info = reverse_geocode_coordinate(lat, lon, search_radius_km=search_radius_km)
         
         if not location_info['city']:
             raise HTTPException(status_code=404, detail="Could not determine user's city")
