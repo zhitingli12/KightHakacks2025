@@ -1,67 +1,58 @@
-import datetime
-from zoneinfo import ZoneInfo
+import os
+import sys
+
+
 from google.adk.agents import Agent
+from google.adk.tools import google_search, FunctionTool
+# from api import *
+from pydantic import BaseModel, Field
 
-def get_weather(city: str) -> dict:
-    """Retrieves the current weather report for a specified city.
+# Add parent directory to path to import utils
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from utils.load_instruction import load_instruction_from_file
 
-    Args:
-        city (str): The name of the city for which to retrieve the weather report.
-
-    Returns:
-        dict: status and result or error msg.
-    """
-    if city.lower() == "new york":
-        return {
-            "status": "success",
-            "report": (
-                "The weather in New York is sunny with a temperature of 25 degrees"
-                " Celsius (77 degrees Fahrenheit)."
-            ),
-        }
-    else:
-        return {
-            "status": "error",
-            "error_message": f"Weather information for '{city}' is not available.",
-        }
+class HomeInsuranceExpertOutput(BaseModel):
+    InsuranceRecommendation: str = Field(..., description="Recommended type of home insurance based on city weather and risk factors.")
+    RiskFactors: str = Field(..., description="Key risk factors influencing the insurance recommendation.")
+    Price: str = Field(..., description="Estimated price range for the recommended insurance.")
 
 
-def get_current_time(city: str) -> dict:
-    """Returns the current time in a specified city.
+# def findCityBoundary(city: str) -> CityBoundaryResponse:
+#     boundary = get_city_boundary(city)
+#     return boundary
 
-    Args:
-        city (str): The name of the city for which to retrieve the current time.
+# def findCity(lat: float, lon: float) -> LocationResponse:
+#     city = reverse_geocode_coordinate(lat, lon)
+#     return city
 
-    Returns:
-        dict: status and result or error msg.
-    """
+# def findNearbyCities(lat: float, lon: float, radius_km: int = 50) -> CitiesListResponse:
+#     cities = list_available_cities(lat, lon, radius_km)
+#     return cities
 
-    if city.lower() == "new york":
-        tz_identifier = "America/New_York"
-    else:
-        return {
-            "status": "error",
-            "error_message": (
-                f"Sorry, I don't have timezone information for {city}."
-            ),
-        }
+# findCityBoundary_tool = FunctionTool(
+#     func=findCityBoundary,
+# )
+# findCity_tool = FunctionTool(
+#     func=findCity,
+# )
+# findNearbyCities_tool = FunctionTool(
+#     func=findNearbyCities,
+# )
 
-    tz = ZoneInfo(tz_identifier)
-    now = datetime.datetime.now(tz)
-    report = (
-        f'The current time in {city} is {now.strftime("%Y-%m-%d %H:%M:%S %Z%z")}'
-    )
-    return {"status": "success", "report": report}
-
+# Load instruction from file
+instruction_text = load_instruction_from_file("home_insurance_expert.txt")
 
 root_agent = Agent(
-    name="weather_time_agent",
+    name="home_insurance_expert",
     model="gemini-2.0-flash",
-    description=(
-        "Agent to answer questions about the time and weather in a city."
-    ),
-    instruction=(
-        "You are a helpful agent who can answer user questions about the time and weather in a city."
-    ),
-    tools=[get_weather, get_current_time],
+    description="You are a home insurance expert.",
+    instruction = instruction_text,
+    tools=[google_search],
+)
+
+summarization_agent = Agent(
+    name="summarization_agent",
+    model="gemini-2.0-flash",
+    description="You are an agent that summarizes text content.",
+    instruction="Summarize the given text content concisely.",
 )

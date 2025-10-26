@@ -11,22 +11,42 @@ interface Message {
   timestamp: Date;
 }
 
-const AI_RESPONSES = [
-  "That's a great question about Florida! Let me help you with that.",
-  "I understand. Based on what you've told me about Florida counties, I'd suggest...",
-  "Interesting! Florida has so much to offer. Here's what I think about that...",
-  "I'm here to assist you with information about Florida. Could you tell me more?",
-  "Thanks for sharing! Here's my perspective on Florida's beautiful counties.",
-  "That makes sense. Let me provide some insights about the Sunshine State.",
-  "Florida is indeed amazing! Each county has its unique character and attractions.",
-  "Great question! Florida's 67 counties each offer something special.",
-];
+// API configuration
+const API_BASE_URL = 'http://localhost:8000';
+
+const callAgentAPI = async (message: string): Promise<string> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ message }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Fix: Your backend returns { response: "text" }, not { success: true, response: "text" }
+    if (data.response) {
+      return data.response;
+    } else {
+      return "I'm sorry, I encountered an error processing your request. Please try again.";
+    }
+  } catch (error) {
+    console.error('Error calling agent API:', error);
+    return "I'm having trouble connecting to the service. Please check if the backend is running.";
+  }
+};
 
 export function ChatBox() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: "Hello! I'm your Florida AI assistant. How can I help you learn about Florida's counties today?",
+      text: "Hello! I'm your home insurance expert. I can help you find the right insurance coverage based on your location's weather patterns and risk factors. What's your city or area of interest?",
       sender: 'ai',
       timestamp: new Date(),
     },
@@ -43,31 +63,45 @@ export function ChatBox() {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
+    const userMessage = inputValue.trim();
     const newMessage: Message = {
       id: Date.now().toString(),
-      text: inputValue,
+      text: userMessage,
       sender: 'user',
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, newMessage]);
+    setMessages((prev: Message[]) => [...prev, newMessage]);
     setInputValue('');
     setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      // Call the agent API
+      const aiResponseText = await callAgentAPI(userMessage);
+      
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-        text: AI_RESPONSES[Math.floor(Math.random() * AI_RESPONSES.length)],
+        text: aiResponseText,
         sender: 'ai',
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, aiResponse]);
+      
+      setMessages((prev: Message[]) => [...prev, aiResponse]);
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        text: "I'm sorry, I'm having trouble responding right now. Please try again.",
+        sender: 'ai',
+        timestamp: new Date(),
+      };
+      setMessages((prev: Message[]) => [...prev, errorResponse]);
+    } finally {
       setIsTyping(false);
-    }, 1000 + Math.random() * 1000);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -86,7 +120,7 @@ export function ChatBox() {
           </div>
         </div>
         <div>
-          <h2 className="text-[#4a5a3f]">Florida AI Assistant</h2>
+          <h2 className="text-[#4a5a3f]">Home Insurance Expert</h2>
           <p className="text-sm text-[#6b7b5f]">● online</p>
         </div>
       </div>
