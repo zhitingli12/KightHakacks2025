@@ -9,3 +9,5 @@ osmnx
 requests
 geopandas
 shapely
+geopandas
+pyarrow
