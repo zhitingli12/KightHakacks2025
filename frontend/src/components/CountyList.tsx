@@ -35,7 +35,7 @@ export function CountyList({ onCountyClick }: CountyListProps) {
           placeholder="Search counties..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-12 bg-[#f5f5e8] border-3 border-[#a0a089] focus:border-[#7a8c6f] rounded-full px-5 h-12 text-[#4a5a3f] placeholder:text-[#a0a089] shadow-inner"
+          className="pl-12 pr-5 bg-[#f5f5e8] border-3 border-[#a0a089] focus:border-[#7a8c6f] rounded-full h-12 text-[#4a5a3f] placeholder:text-[#a0a089] shadow-inner"
         />
       </div>
 

@@ -27,7 +27,7 @@ export function CountyDetails({ countyName, onBack, onCityClick }: CountyDetails
         className="mb-6 bg-[#7a8c6f] hover:bg-[#6b7b5f] border-3 border-[#5a5a4a] rounded-full shadow-lg text-[#e8e8d8]"
       >
         <ArrowLeft className="w-4 h-4 mr-2" />
-        Back to Map
+        Back to County List
       </Button>
 
       {/* County Cities Card */}
@@ -43,15 +43,14 @@ export function CountyDetails({ countyName, onBack, onCityClick }: CountyDetails
 
         {/* Content */}
         <div className="p-6 bg-[#f5f5e8] space-y-6">
-          {/* Search Bar */}
           <div className="relative">
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-[#a0a089]" />
             <Input
               type="text"
-              placeholder="Search cities..."
+              placeholder="Search counties..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-12 bg-[#e8e8d8] border-3 border-[#a0a089] focus:border-[#7a8c6f] rounded-full px-5 h-12 text-[#4a5a3f] placeholder:text-[#a0a089] shadow-inner"
+              className="pl-12 pr-5 bg-[#f5f5e8] border-3 border-[#a0a089] focus:border-[#7a8c6f] rounded-full h-12 text-[#4a5a3f] placeholder:text-[#a0a089] shadow-inner"
             />
           </div>
 
