@@ -13,8 +13,8 @@ to run backend
 ```bash
 cd app-backend
 ```
-python api.py or python3 api.py
 ```bash
+python api.py or python3 api.py
 ```
 to run frontend
 ```bash
