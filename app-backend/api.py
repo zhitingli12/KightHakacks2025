@@ -1,10 +1,15 @@
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Tuple
 import sys
 import os
 import json
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'functions'))
 
@@ -14,12 +19,21 @@ from osm_api import (
     list_available_cities,
     reverse_geocode_coordinate
 )
+
+import inspect
+logger.info(
+    "reverse_geocode_coordinate comes from %s with signature %s",
+    reverse_geocode_coordinate.__code__.co_filename,
+    inspect.signature(reverse_geocode_coordinate),
+)
+
 app = FastAPI(
     title="Geography API",
     description="API for city boundary, city coordinates, and find user location based on coordinates",
     version="1.0.0"
 )
 
+# CORS Configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -28,7 +42,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-#creating a Pydantic model to define the request body structure
+# Pydantic Models
+class MapClickRequest(BaseModel):
+    lat: float = Field(..., ge=-90, le=90, description="Latitude coordinate")
+    lon: float = Field(..., ge=-180, le=180, description="Longitude coordinate")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "lat": 25.7617,
+                "lon": -80.1918
+            }
+        }
+
 class LocationResponse(BaseModel):
     country: Optional[str] = None
     state: Optional[str] = None
@@ -36,6 +62,11 @@ class LocationResponse(BaseModel):
     city: Optional[str] = None
     all_cities_nearby: List[str] = []
     coordinates: dict
+
+class MapClickResponse(BaseModel):
+    clicked_location: dict
+    location_info: LocationResponse
+    nearby_cities: List[str]
 
 class CityBoundaryResponse(BaseModel):
     city_name: str
@@ -51,22 +82,26 @@ class CitiesListResponse(BaseModel):
     cities: List[str]
 
 class UserLocationWorkflowResponse(BaseModel):
-    user_location: dict  # Expecting {'lat': float, 'lon': float}
+    user_location: dict
     search_area: dict
     city_boundary_found: bool
     location_info: dict
-  
+
+# Root endpoint
 @app.get("/")
 async def root():
     return {
         "message": "City Boundaries API - Connected",
         "version": "1.0.0",
+        "status": "running",
         "docs": "/docs",
         "endpoints": {
+            "health": "/health",
             "reverse_geocode": "/reverse-geocode",
             "city_boundary": "/city-boundary",
             "cities_list": "/cities",
-            "user_workflow": "/user-location-workflow"
+            "user_workflow": "/user-location-workflow",
+            "map_click": "/map-click (POST)"
         }
     }
 
@@ -74,41 +109,98 @@ async def root():
 async def health_check():
     return {"status": "healthy", "message": "API is running"}
 
+# MAP CLICK ENDPOINT - Main endpoint for frontend clicks
+@app.post("/map-click", response_model=MapClickResponse)
+async def handle_map_click(request: MapClickRequest):
+    """
+    Handle map click events from frontend.
+    Returns location info and nearby cities for the clicked coordinates.
+    """
+    try:
+        lat = request.lat
+        lon = request.lon
+        
+        logger.info(f"=== MAP CLICK RECEIVED ===")
+        logger.info(f"Latitude: {lat}")
+        logger.info(f"Longitude: {lon}")
+        
+        # Get location information - FIXED: use search_radius_km instead of radius_km
+        logger.info("Calling reverse_geocode_coordinate...")
+        location_info = reverse_geocode_coordinate(lat, lon, search_radius_km=25)
+        logger.info(f"Location info received: {location_info}")
+        
+        # Get nearby cities from the function's response
+        nearby_cities = location_info.get('all_cities_nearby', [])
+        
+        # Also try to get more cities using list_available_cities
+        try:
+            radius_degrees = 25 / 111.0
+            bbox = (
+                lat - radius_degrees,
+                lon - radius_degrees,
+                lat + radius_degrees,
+                lon + radius_degrees
+            )
+            
+            logger.info(f"Fetching additional cities in bbox: {bbox}")
+            additional_cities = list_available_cities(bbox=bbox)
+            logger.info(f"Found {len(additional_cities)} additional cities")
+            
+            # Combine and deduplicate
+            all_nearby = list(set(nearby_cities + additional_cities))
+            nearby_cities = sorted(all_nearby)[:10]  # Limit to 10
+            
+        except Exception as e:
+            logger.error(f"Error fetching additional cities: {e}")
+            # Use what we got from reverse_geocode_coordinate
+            nearby_cities = nearby_cities[:10]
+        
+        response = MapClickResponse(
+            clicked_location={
+                "lat": lat,
+                "lon": lon
+            },
+            location_info=LocationResponse(**location_info),
+            nearby_cities=nearby_cities
+        )
+        
+        logger.info("=== MAP CLICK RESPONSE PREPARED ===")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in map-click endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error processing map click: {str(e)}")
+
 @app.get("/reverse-geocode", response_model=LocationResponse)
 async def reverse_geocode(
-    lat: float = Query(..., description = "Latitude of the location", ge = -90, le = 90),
-    lon: float = Query(..., description = "Longitude of the location", ge = -180, le = 180),
-    radius_km: float = Query(25, description = "Radius in kilometers to search within", ge =1, le = 100),
+    lat: float = Query(..., description="Latitude of the location", ge=-90, le=90),
+    lon: float = Query(..., description="Longitude of the location", ge=-180, le=180),
+    radius_km: float = Query(25, description="Radius in kilometers to search within", ge=1, le=100),
 ):
     """
     Convert coordinates to location information (country, state, county, city).
-    
-    - **lat**: Latitude (-90 to 90)
-    - **lon**: Longitude (-180 to 180) 
-    - **radius_km**: Search radius in kilometers (1-100)
     """
     try:
-        location_info = reverse_geocode_coordinate(lat, lon, radius_km)
+        logger.info(f"Reverse geocoding: lat={lat}, lon={lon}, radius_km={radius_km}")
+        
+        # FIXED: use search_radius_km parameter name
+        location_info = reverse_geocode_coordinate(lat, lon, search_radius_km=radius_km)
+        
         return LocationResponse(**location_info)
     except Exception as e:
+        logger.error(f"Error in reverse-geocode: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 @app.get("/city-boundary", response_model=CityBoundaryResponse)
 async def get_city_boundary_api(
-    city_name: str = Query(..., description = "Name of city to find"),
+    city_name: str = Query(..., description="Name of city to find"),
     min_lat: float = Query(..., description="Minimum latitude of bounding box"),
     min_lon: float = Query(..., description="Minimum longitude of bounding box"),
     max_lat: float = Query(..., description="Maximum latitude of bounding box"),
     max_lon: float = Query(..., description="Maximum longitude of bounding box"),
     return_geojson: bool = Query(True, description="Return GeoJSON format")
 ):
-    """
-    Get boundary information for a specific city within a bounding box.
-    
-    - **city_name**: Name of the city (case-insensitive)
-    - **min_lat, min_lon, max_lat, max_lon**: Bounding box coordinates
-    - **return_geojson**: Whether to return GeoJSON format
-    """
+    """Get boundary information for a specific city within a bounding box."""
     try:
         bbox = (min_lat, min_lon, max_lat, max_lon)
         
@@ -148,9 +240,9 @@ async def get_city_boundary_api(
             )
             
     except Exception as e:
+        logger.error(f"Error in get_city_boundary_api: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error getting city boundary: {str(e)}")
 
-# 3. Cities List Endpoint
 @app.get("/cities", response_model=CitiesListResponse)
 async def get_cities_list(
     min_lat: float = Query(..., description="Minimum latitude of bounding box"),
@@ -158,13 +250,10 @@ async def get_cities_list(
     max_lat: float = Query(..., description="Maximum latitude of bounding box"),
     max_lon: float = Query(..., description="Maximum longitude of bounding box")
 ):
-    """
-    Get list of all available cities within a bounding box.
-    
-    - **min_lat, min_lon, max_lat, max_lon**: Bounding box coordinates
-    """
+    """Get list of all available cities within a bounding box."""
     try:
         bbox = (min_lat, min_lon, max_lat, max_lon)
+        logger.info(f"Fetching cities for bbox: {bbox}")
         cities = list_available_cities(bbox=bbox)
         
         return CitiesListResponse(
@@ -174,30 +263,24 @@ async def get_cities_list(
         )
         
     except Exception as e:
+        logger.error(f"Error in get_cities_list: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error getting cities list: {str(e)}")
 
-# 4. Complete User Location Workflow
 @app.get("/user-location-workflow", response_model=UserLocationWorkflowResponse)
 async def user_location_workflow(
     lat: float = Query(..., description="User's latitude coordinate", ge=-90, le=90),
     lon: float = Query(..., description="User's longitude coordinate", ge=-180, le=180),
     search_radius_km: float = Query(25, description="Search radius around user in km", ge=5, le=100)
 ):
-    """
-    Complete workflow: Get user's city + create city-wide search area.
-    
-    - **lat**: User's latitude
-    - **lon**: User's longitude  
-    - **search_radius_km**: Search radius for nearby cities
-    """
+    """Complete workflow: Get user's city + create city-wide search area."""
     try:
-        # Step 1: Reverse geocode user location
-        location_info = reverse_geocode_coordinate(lat, lon, search_radius_km)
+        # Get location information - FIXED: use correct parameter name
+        location_info = reverse_geocode_coordinate(lat, lon, search_radius_km=search_radius_km)
         
-        if not location_info['city']:
+        if not location_info.get('city'):
             raise HTTPException(status_code=404, detail="Could not determine user's city")
         
-        # Step 2: Create search bounding box
+        # Create search bounding box
         radius_degrees = search_radius_km / 111.0
         bbox = (
             lat - radius_degrees,
@@ -206,10 +289,10 @@ async def user_location_workflow(
             lon + radius_degrees
         )
         
-        # Step 3: Get nearby cities
+        # Get nearby cities
         nearby_cities = list_available_cities(bbox=bbox)
         
-        # Step 4: Try to get user's city boundary
+        # Try to get user's city boundary
         user_city = location_info['city']
         city_boundary = get_city_boundary(user_city, bbox=bbox)
         
@@ -218,8 +301,8 @@ async def user_location_workflow(
                 "lat": lat,
                 "lon": lon,
                 "city": user_city,
-                "state": location_info['state'],
-                "country": location_info['country']
+                "state": location_info.get('state'),
+                "country": location_info.get('country')
             },
             search_area={
                 "bbox": bbox,
@@ -234,46 +317,16 @@ async def user_location_workflow(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Error in user_location_workflow: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error in user workflow: {str(e)}")
-
-# 5. Convenience endpoints with preset locations
-@app.get("/miami-area")
-async def get_miami_area():
-    """Get cities in Miami metropolitan area (preset bounding box)"""
-    miami_bbox = (25.0, -81.0, 27.0, -79.5)  # South Florida
-    cities = list_available_cities(bbox=miami_bbox)
-    
-    return {
-        "area": "Miami Metropolitan Area",
-        "bbox": miami_bbox,
-        "total_cities": len(cities),
-        "cities": cities
-    }
-
-@app.get("/examples")
-async def get_examples():
-    """Get example API calls for testing"""
-    return {
-        "examples": {
-            "reverse_geocode_miami": {
-                "url": "/reverse-geocode?lat=25.7617&lon=-80.1918&radius_km=25",
-                "description": "Find what city Miami coordinates are in"
-            },
-            "miami_boundary": {
-                "url": "/city-boundary?city_name=Miami&min_lat=25.0&min_lon=-81.0&max_lat=27.0&max_lon=-79.5",
-                "description": "Get Miami city boundary"
-            },
-            "south_florida_cities": {
-                "url": "/cities?min_lat=25.0&min_lon=-81.0&max_lat=27.0&max_lon=-79.5", 
-                "description": "List all cities in South Florida"
-            },
-            "user_workflow_miami": {
-                "url": "/user-location-workflow?lat=25.7617&lon=-80.1918&search_radius_km=25",
-                "description": "Complete workflow for Miami user"
-            }
-        }
-    }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print("\n" + "="*50)
+    print("🚀 Starting FastAPI server...")
+    print("="*50)
+    print("📍 API available at: http://localhost:8000")
+    print("📚 Documentation: http://localhost:8000/docs")
+    print("💚 Health check: http://localhost:8000/health")
+    print("="*50 + "\n")
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

@@ -2,6 +2,7 @@ import geopandas as gpd
 import requests
 from functools import lru_cache
 import json
+from typing import Optional
 
 @lru_cache(maxsize=128)
 def get_city_boundaries_by_bbox(bbox):
@@ -156,15 +157,100 @@ def list_available_cities(bbox=None):
     return sorted(all_cities['name'].tolist())
 
 
-def reverse_geocode_coordinate(lat, lon, search_radius_km=50):
+# def reverse_geocode_coordinate(lat, lon, search_radius_km=50):
+#     """
+#     Takes coordinates and returns what country, state, county, and city the coordinate is in.
+    
+#     Args:
+#         lat (float): Latitude coordinate
+#         lon (float): Longitude coordinate
+#         search_radius_km (float): Search radius in kilometers (default: 50km)
+        
+#     Returns:
+#         dict: Dictionary containing location information with keys:
+#               - country: Country name
+#               - state: State/province name
+#               - county: County name
+#               - city: City name
+#               - all_cities_nearby: List of nearby cities within search radius
+#     """
+#     from shapely.geometry import Point
+    
+#     # Create point from coordinates
+#     point = Point(lon, lat)
+    
+#     # Calculate bounding box around the point (approximately search_radius_km)
+#     # Rough conversion: 1 degree ≈ 111 km
+#     radius_degrees = search_radius_km / 111.0
+#     bbox = (
+#         lat - radius_degrees,  # min_lat
+#         lon - radius_degrees,  # min_lon
+#         lat + radius_degrees,  # max_lat
+#         lon + radius_degrees   # max_lon
+#     )
+    
+#     # Initialize result
+#     result = {
+#         "country": None,
+#         "state": None,
+#         "county": None,
+#         "city": None,
+#         "all_cities_nearby": [],
+#         "coordinates": {"lat": lat, "lon": lon}
+#     }
+    
+#     try:
+#         # First, try to get administrative boundaries using Overpass API
+#         result.update(_get_admin_boundaries_at_point(lat, lon))
+        
+#         # Get nearby cities using our existing function
+#         cities_gdf = get_city_boundaries_by_bbox(bbox)
+        
+#         if not cities_gdf.empty:
+#             # Set CRS for the GeoDataFrame (it should be WGS84/EPSG:4326)
+#             if cities_gdf.crs is None:
+#                 cities_gdf = cities_gdf.set_crs('EPSG:4326')
+            
+#             # For point geometries, we can't do contains, so find closest
+#             # Calculate distances to all cities
+#             cities_gdf['distance'] = cities_gdf.geometry.distance(point)
+            
+#             # Find all nearby cities (within bounding box)
+#             nearby_cities = cities_gdf["name"].tolist()
+#             result["all_cities_nearby"] = sorted(nearby_cities)
+            
+#             # Find closest city
+#             if not cities_gdf.empty:
+#                 closest_city = cities_gdf.loc[cities_gdf['distance'].idxmin()]
+                
+#                 # Only use closest if it's within reasonable distance (0.1 degrees ≈ 11km)
+#                 if closest_city['distance'] < 0.1:
+#                     result["city"] = closest_city['name']
+#                 else:
+#                     result["city"] = f"{closest_city['name']} (nearest, {closest_city['distance']*111:.1f}km)"
+        
+#     except Exception as e:
+#         print(f"Error in reverse geocoding: {e}")
+#         result["error"] = str(e)
+    
+#     return result
+
+def reverse_geocode_coordinate(
+    lat: float,
+    lon: float,
+    *,
+    search_radius_km: float = 50,
+    radius_km: Optional[float] = None,
+):
     """
     Takes coordinates and returns what country, state, county, and city the coordinate is in.
-    
+
     Args:
         lat (float): Latitude coordinate
         lon (float): Longitude coordinate
-        search_radius_km (float): Search radius in kilometers (default: 50km)
-        
+        search_radius_km (float): Search radius in kilometers (default: 50 km)
+        radius_km (Optional[float]): Legacy parameter name; overrides search_radius_km if provided.
+
     Returns:
         dict: Dictionary containing location information with keys:
               - country: Country name
@@ -173,67 +259,54 @@ def reverse_geocode_coordinate(lat, lon, search_radius_km=50):
               - city: City name
               - all_cities_nearby: List of nearby cities within search radius
     """
+    if radius_km is not None:
+        search_radius_km = radius_km
+
     from shapely.geometry import Point
-    
-    # Create point from coordinates
+
     point = Point(lon, lat)
-    
-    # Calculate bounding box around the point (approximately search_radius_km)
+
     # Rough conversion: 1 degree ≈ 111 km
     radius_degrees = search_radius_km / 111.0
     bbox = (
         lat - radius_degrees,  # min_lat
         lon - radius_degrees,  # min_lon
         lat + radius_degrees,  # max_lat
-        lon + radius_degrees   # max_lon
+        lon + radius_degrees,  # max_lon
     )
-    
-    # Initialize result
+
     result = {
         "country": None,
         "state": None,
         "county": None,
         "city": None,
         "all_cities_nearby": [],
-        "coordinates": {"lat": lat, "lon": lon}
+        "coordinates": {"lat": lat, "lon": lon},
     }
-    
-    try:
-        # First, try to get administrative boundaries using Overpass API
-        result.update(_get_admin_boundaries_at_point(lat, lon))
-        
-        # Get nearby cities using our existing function
-        cities_gdf = get_city_boundaries_by_bbox(bbox)
-        
-        if not cities_gdf.empty:
-            # Set CRS for the GeoDataFrame (it should be WGS84/EPSG:4326)
-            if cities_gdf.crs is None:
-                cities_gdf = cities_gdf.set_crs('EPSG:4326')
-            
-            # For point geometries, we can't do contains, so find closest
-            # Calculate distances to all cities
-            cities_gdf['distance'] = cities_gdf.geometry.distance(point)
-            
-            # Find all nearby cities (within bounding box)
-            nearby_cities = cities_gdf["name"].tolist()
-            result["all_cities_nearby"] = sorted(nearby_cities)
-            
-            # Find closest city
-            if not cities_gdf.empty:
-                closest_city = cities_gdf.loc[cities_gdf['distance'].idxmin()]
-                
-                # Only use closest if it's within reasonable distance (0.1 degrees ≈ 11km)
-                if closest_city['distance'] < 0.1:
-                    result["city"] = closest_city['name']
-                else:
-                    result["city"] = f"{closest_city['name']} (nearest, {closest_city['distance']*111:.1f}km)"
-        
-    except Exception as e:
-        print(f"Error in reverse geocoding: {e}")
-        result["error"] = str(e)
-    
-    return result
 
+    try:
+        result.update(_get_admin_boundaries_at_point(lat, lon))
+
+        cities_gdf = get_city_boundaries_by_bbox(bbox)
+        if not cities_gdf.empty:
+            if cities_gdf.crs is None:
+                cities_gdf = cities_gdf.set_crs("EPSG:4326")
+
+            cities_gdf["distance"] = cities_gdf.geometry.distance(point)
+
+            result["all_cities_nearby"] = sorted(cities_gdf["name"].tolist())
+
+            closest_city = cities_gdf.loc[cities_gdf["distance"].idxmin()]
+            if closest_city["distance"] < 0.1:
+                result["city"] = closest_city["name"]
+            else:
+                result["city"] = f"{closest_city['name']} (nearest, {closest_city['distance'] * 111:.1f}km)"
+
+    except Exception as exc:
+        print(f"Error in reverse geocoding: {exc}")
+        result["error"] = str(exc)
+
+    return result
 
 def _get_admin_boundaries_at_point(lat, lon):
     """

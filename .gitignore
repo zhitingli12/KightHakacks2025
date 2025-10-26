@@ -26,6 +26,9 @@ frontend/node_modules/
 frontend/package.json
 frontend/package-lock.json
 
+# Local virtual environment
+.venv/
+
 # --- System / Editor Files ---
 .DS_Store
 Thumbs.db
