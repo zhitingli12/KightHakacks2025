@@ -249,7 +249,7 @@ export default function App() {
                     <div className="w-3 h-3 rounded-full bg-[#c9b896] border-2 border-[#5a5a4a]"></div>
                     <div className="w-3 h-3 rounded-full bg-[#a0a089] border-2 border-[#5a5a4a]"></div>
                   </div>
-                  <span className="text-[#e8e8d8]">Florida Explorer</span>
+                  <span className="text-[#e8e8d8]">Nuvona</span>
                 </div>
               </div>
 
