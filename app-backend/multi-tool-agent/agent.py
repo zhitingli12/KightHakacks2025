@@ -1,12 +1,12 @@
 import os
+import sys
+
 
 from google.adk.agents import Agent
 from google.adk.tools import google_search, FunctionTool
-from api import *
+# from api import *
 from pydantic import BaseModel, Field
 
-import sys
-import os
 # Add parent directory to path to import utils
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.load_instruction import load_instruction_from_file
@@ -48,4 +48,11 @@ root_agent = Agent(
     description="You are a home insurance expert.",
     instruction = instruction_text,
     tools=[google_search],
+)
+
+summarization_agent = Agent(
+    name="summarization_agent",
+    model="gemini-2.0-flash",
+    description="You are an agent that summarizes text content.",
+    instruction="Summarize the given text content concisely.",
 )

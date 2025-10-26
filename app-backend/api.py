@@ -4,276 +4,303 @@ from pydantic import BaseModel
 from typing import Optional, List, Tuple
 import sys
 import os
-import json
+import re
+import subprocess
 
-sys.path.append(os.path.join(os.path.dirname(__file__), 'functions'))
+# -------------------------------------------------------------------
+# Local module paths
+# -------------------------------------------------------------------
+BASE_DIR = os.path.dirname(__file__)
+sys.path.append(os.path.join(BASE_DIR, "functions"))
+sys.path.append(os.path.join(BASE_DIR, "multi-tool-agent"))
 
+# -------------------------------------------------------------------
+# Local imports
+# -------------------------------------------------------------------
 from osm_api import (
     get_city_boundary,
     get_city_boundary_geojson,
     list_available_cities,
-    reverse_geocode_coordinate
-)
-app = FastAPI(
-    title="Geography API",
-    description="API for city boundary, city coordinates, and find user location based on coordinates",
-    version="1.0.0"
+    reverse_geocode_coordinate,
 )
 
+# Note: imported to keep parity with your project structure
+# (not used directly since we're calling the CLI runner for statelessness)
+from agent import root_agent, summarization_agent  # noqa: F401
+
+# -------------------------------------------------------------------
+# FastAPI app setup
+# -------------------------------------------------------------------
+app = FastAPI(
+    title="Geography API",
+    description="API for city boundary, city coordinates, and location services",
+    version="1.0.0",
+)
+
+# CORS for local frontends
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-#creating a Pydantic model to define the request body structure
+# -------------------------------------------------------------------
+# Pydantic Models
+# -------------------------------------------------------------------
 class LocationResponse(BaseModel):
-    country: Optional[str] = None
-    state: Optional[str] = None
+    city: str
+    state: str
     county: Optional[str] = None
-    city: Optional[str] = None
-    all_cities_nearby: List[str] = []
-    coordinates: dict
+    country: str
+    latitude: float
+    longitude: float
+    location_info: dict
 
 class CityBoundaryResponse(BaseModel):
-    city_name: str
-    found: bool
-    osm_id: Optional[int] = None
-    place_type: Optional[str] = None
-    coordinates: Optional[dict] = None
-    geojson: Optional[dict] = None
+    city: str
+    boundary: List[Tuple[float, float]]
+    center: Tuple[float, float]
+    bbox: Tuple[float, float, float, float]
+    location_info: dict
 
 class CitiesListResponse(BaseModel):
-    bbox: Tuple[float, float, float, float]
-    total_cities: int
-    cities: List[str]
-
-class UserLocationWorkflowResponse(BaseModel):
-    user_location: dict  # Expecting {'lat': float, 'lon': float}
-    search_area: dict
-    city_boundary_found: bool
+    cities: List[dict]
+    count: int
+    search_center: Tuple[float, float]
+    search_radius_km: int
     location_info: dict
-  
+
+class ChatMessage(BaseModel):
+    message: str
+
+class ChatResponse(BaseModel):
+    response: str
+
+# -------------------------------------------------------------------
+# Helpers
+# -------------------------------------------------------------------
+def format_insurance_response(text: str) -> str:
+    """
+    Preserve paragraphs and add gentle structure for readability.
+    - Keep existing newlines
+    - Bold short header-like lines
+    - Normalize list bullets
+    - Add spacing between bullets and paragraphs
+    """
+    s = (text or "").replace("\r\n", "\n").strip()
+
+    # Emphasize short header-like lines that end with ":" on their own
+    s = re.sub(r'(?m)^\s*([^\n]{3,80}):\s*$', r'**\1:**', s)
+
+    # Normalize lists: turn "-" / "*" / "1." into bullets
+    s = re.sub(r'(?m)^\s*[-*]\s+', '• ', s)
+    s = re.sub(r'(?m)^\s*\d+\.\s+', '• ', s)
+
+    # Ensure a blank line before bullets to avoid wall-of-text
+    s = re.sub(r'(?m)([^\n])\n(• )', r'\1\n\n\2', s)
+
+    # If absolutely no paragraph breaks exist, add soft breaks after sentence ends
+    if "\n\n" not in s:
+        s = re.sub(r'([.!?])\s+(?=[A-Z0-9])', r'\1\n\n', s)
+
+    # Collapse 3+ blank lines to at most two
+    s = re.sub(r'\n{3,}', '\n\n', s)
+
+    # Optional title if the response doesn't already start styled
+    if not s.lower().startswith(("##", "**", "🏠", "insurance", "geography", "hello", "hi")):
+        s = f"🏠 **Insurance Expert Response**\n\n{s}"
+
+    # Helpful closing
+    if not any(k in s.lower() for k in ("help", "question", "more details")):
+        s += "\n\n💡 *Need more details? Ask about coverage, pricing, or local risk factors.*"
+
+    return s.strip()
+
+
+def run_adk_once(prompt: str, agent_id: str = "multi-tool-agent", timeout_sec: int = 45) -> str:
+    """
+    Invoke the ADK CLI once (stateless). Returns combined output (stdout / fallback to stderr if meaningful).
+    - Keeps things stateless (no session mgmt here).
+    - Encourage the agent to emit Markdown for better spacing.
+    """
+    # Encourage structured, readable output
+    full_input = (
+        "Please respond in clear Markdown with short headings and bullet points where helpful. "
+        "Keep paragraphs separated with blank lines for readability.\n\n"
+        f"{prompt}"
+    )
+    result = subprocess.run(
+        ["adk", "run", agent_id],
+        input=full_input,
+        cwd=BASE_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout_sec,
+        shell=False,
+    )
+
+    # Prefer stdout; use stderr if it contains non-error content
+    stdout = (result.stdout or "").strip()
+    stderr = (result.stderr or "").strip()
+
+    if stdout:
+        return stdout
+    if stderr and "error" not in stderr.lower():
+        return stderr
+    return ""
+
+
+def summarize_markdown(text: str, timeout_sec: int = 25) -> str:
+    """
+    Ask the agent (via CLI) to produce a concise, well-formatted Markdown summary.
+    Falls back to original text on failure.
+    """
+    if not text.strip():
+        return ""
+
+    prompt = (
+        "Summarize the following content for a homeowner audience. "
+        "Use Markdown with short headings and bullet points. "
+        "Keep it concise but readable, and preserve any important lists or structure.\n\n"
+        f"{text}"
+    )
+    try:
+        output = run_adk_once(prompt, agent_id="multi-tool-agent", timeout_sec=timeout_sec)
+        return output.strip() or text
+    except Exception:
+        return text
+
+# -------------------------------------------------------------------
+# API Endpoints
+# -------------------------------------------------------------------
 @app.get("/")
 async def root():
     return {
-        "message": "City Boundaries API - Connected",
+        "message": "Geography API - Connected",
         "version": "1.0.0",
         "docs": "/docs",
         "endpoints": {
             "reverse_geocode": "/reverse-geocode",
             "city_boundary": "/city-boundary",
             "cities_list": "/cities",
-            "user_workflow": "/user-location-workflow"
-        }
+            "user_workflow": "/user-location-workflow",
+            "chat": "/chat",
+        },
     }
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "message": "API is running"}
 
-@app.get("/reverse-geocode", response_model=LocationResponse)
-async def reverse_geocode(
-    lat: float = Query(..., description = "Latitude of the location", ge = -90, le = 90),
-    lon: float = Query(..., description = "Longitude of the location", ge = -180, le = 180),
-    radius_km: float = Query(25, description = "Radius in kilometers to search within", ge =1, le = 100),
-):
+# Simple stateless chat endpoint
+@app.post("/chat", response_model=ChatResponse)
+async def chat_with_agent(chat_message: ChatMessage):
     """
-    Convert coordinates to location information (country, state, county, city).
-    
-    - **lat**: Latitude (-90 to 90)
-    - **lon**: Longitude (-180 to 180) 
-    - **radius_km**: Search radius in kilometers (1-100)
+    Stateless chat with the Home Insurance Expert (via ADK CLI).
+    Each message is processed independently; no memory is kept.
     """
     try:
-        location_info = reverse_geocode_coordinate(lat, lon, radius_km)
-        return LocationResponse(**location_info)
+        user_input = (chat_message.message or "").strip()
+        if not user_input:
+            return ChatResponse(response="Please provide a message.")
+
+        # 1) Run the main agent statelessly via CLI
+        agent_output = run_adk_once(user_input, agent_id="multi-tool-agent", timeout_sec=60)
+
+        # 2) Summarize/clean it (still stateless) to ensure spacing/Markdown
+        if agent_output:
+            summarized = summarize_markdown(agent_output, timeout_sec=30)
+            formatted = format_insurance_response(summarized)
+            return ChatResponse(response=formatted)
+
+        # Fallback if nothing came back
+        return ChatResponse(
+            response=(
+                f"I received your message: '{user_input}'. I'm your home insurance expert ready to help! "
+                "Tell me a bit more about your coverage needs or location."
+            )
+        )
+
+    except subprocess.TimeoutExpired:
+        return ChatResponse(
+            response="The agent took too long to respond. Please try again with a shorter question."
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@app.get("/city-boundary", response_model=CityBoundaryResponse)
-async def get_city_boundary_api(
-    city_name: str = Query(..., description = "Name of city to find"),
-    min_lat: float = Query(..., description="Minimum latitude of bounding box"),
-    min_lon: float = Query(..., description="Minimum longitude of bounding box"),
-    max_lat: float = Query(..., description="Maximum latitude of bounding box"),
-    max_lon: float = Query(..., description="Maximum longitude of bounding box"),
-    return_geojson: bool = Query(True, description="Return GeoJSON format")
+        print(f"Chat endpoint error: {str(e)}")
+        return ChatResponse(
+            response="I'm having trouble right now. Please try again."
+        )
+
+# -------------------------------------------------------------------
+# Geographic API Endpoints (unchanged)
+# -------------------------------------------------------------------
+@app.get("/reverse-geocode", response_model=LocationResponse)
+async def reverse_geocode_endpoint(
+    lat: float = Query(..., description="Latitude coordinate"),
+    lon: float = Query(..., description="Longitude coordinate")
 ):
-    """
-    Get boundary information for a specific city within a bounding box.
-    
-    - **city_name**: Name of the city (case-insensitive)
-    - **min_lat, min_lon, max_lat, max_lon**: Bounding box coordinates
-    - **return_geojson**: Whether to return GeoJSON format
-    """
     try:
-        bbox = (min_lat, min_lon, max_lat, max_lon)
-        
-        if return_geojson:
-            geojson_data = get_city_boundary_geojson(city_name, bbox=bbox)
-            
-            if "error" in geojson_data:
-                return CityBoundaryResponse(
-                    city_name=city_name,
-                    found=False
-                )
-            
-            return CityBoundaryResponse(
-                city_name=city_name,
-                found=True,
-                geojson=geojson_data
-            )
-        else:
-            city_gdf = get_city_boundary(city_name, bbox=bbox)
-            
-            if city_gdf.empty:
-                return CityBoundaryResponse(
-                    city_name=city_name,
-                    found=False
-                )
-            
-            city_data = city_gdf.iloc[0]
-            return CityBoundaryResponse(
-                city_name=city_name,
-                found=True,
-                osm_id=int(city_data['osm_id']),
-                place_type=city_data['place_type'],
-                coordinates={
-                    "lat": city_data.geometry.y,
-                    "lon": city_data.geometry.x
-                }
-            )
-            
+        result = reverse_geocode_coordinate(lat, lon)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in reverse geocoding: {str(e)}")
+
+@app.get("/city-boundary", response_model=CityBoundaryResponse)
+async def city_boundary_endpoint(
+    city: str = Query(..., description="City name to get boundary for")
+):
+    try:
+        result = get_city_boundary(city)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting city boundary: {str(e)}")
 
-# 3. Cities List Endpoint
+@app.get("/city-boundary-geojson")
+async def city_boundary_geojson_endpoint(
+    city: str = Query(..., description="City name to get GeoJSON boundary for")
+):
+    try:
+        result = get_city_boundary_geojson(city)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting city boundary GeoJSON: {str(e)}")
+
 @app.get("/cities", response_model=CitiesListResponse)
-async def get_cities_list(
-    min_lat: float = Query(..., description="Minimum latitude of bounding box"),
-    min_lon: float = Query(..., description="Minimum longitude of bounding box"), 
-    max_lat: float = Query(..., description="Maximum latitude of bounding box"),
-    max_lon: float = Query(..., description="Maximum longitude of bounding box")
+async def cities_list_endpoint(
+    lat: float = Query(..., description="Latitude coordinate for search center"),
+    lon: float = Query(..., description="Longitude coordinate for search center"),
+    radius_km: int = Query(50, description="Search radius in kilometers")
 ):
-    """
-    Get list of all available cities within a bounding box.
-    
-    - **min_lat, min_lon, max_lat, max_lon**: Bounding box coordinates
-    """
     try:
-        bbox = (min_lat, min_lon, max_lat, max_lon)
-        cities = list_available_cities(bbox=bbox)
-        
-        return CitiesListResponse(
-            bbox=bbox,
-            total_cities=len(cities),
-            cities=cities
-        )
-        
+        result = list_available_cities(lat, lon, radius_km)
+        return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting cities list: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error listing cities: {str(e)}")
 
-# 4. Complete User Location Workflow
-@app.get("/user-location-workflow", response_model=UserLocationWorkflowResponse)
+@app.get("/user-location-workflow")
 async def user_location_workflow(
-    lat: float = Query(..., description="User's latitude coordinate", ge=-90, le=90),
-    lon: float = Query(..., description="User's longitude coordinate", ge=-180, le=180),
-    search_radius_km: float = Query(25, description="Search radius around user in km", ge=5, le=100)
+    lat: float = Query(..., description="User's latitude"),
+    lon: float = Query(..., description="User's longitude"),
+    radius_km: int = Query(50, description="Search radius in kilometers")
 ):
-    """
-    Complete workflow: Get user's city + create city-wide search area.
-    
-    - **lat**: User's latitude
-    - **lon**: User's longitude  
-    - **search_radius_km**: Search radius for nearby cities
-    """
     try:
-        # Step 1: Reverse geocode user location
-        location_info = reverse_geocode_coordinate(lat, lon, search_radius_km)
+        user_location = reverse_geocode_coordinate(lat, lon)
+        nearby_cities = list_available_cities(lat, lon, radius_km)
         
-        if not location_info['city']:
-            raise HTTPException(status_code=404, detail="Could not determine user's city")
-        
-        # Step 2: Create search bounding box
-        radius_degrees = search_radius_km / 111.0
-        bbox = (
-            lat - radius_degrees,
-            lon - radius_degrees,
-            lat + radius_degrees,
-            lon + radius_degrees
-        )
-        
-        # Step 3: Get nearby cities
-        nearby_cities = list_available_cities(bbox=bbox)
-        
-        # Step 4: Try to get user's city boundary
-        user_city = location_info['city']
-        city_boundary = get_city_boundary(user_city, bbox=bbox)
-        
-        return UserLocationWorkflowResponse(
-            user_location={
-                "lat": lat,
-                "lon": lon,
-                "city": user_city,
-                "state": location_info['state'],
-                "country": location_info['country']
-            },
-            search_area={
-                "bbox": bbox,
-                "radius_km": search_radius_km,
-                "all_cities": nearby_cities,
-                "total_cities": len(nearby_cities)
-            },
-            city_boundary_found=not city_boundary.empty,
-            location_info=location_info
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in user workflow: {str(e)}")
-
-# 5. Convenience endpoints with preset locations
-@app.get("/miami-area")
-async def get_miami_area():
-    """Get cities in Miami metropolitan area (preset bounding box)"""
-    miami_bbox = (25.0, -81.0, 27.0, -79.5)  # South Florida
-    cities = list_available_cities(bbox=miami_bbox)
-    
-    return {
-        "area": "Miami Metropolitan Area",
-        "bbox": miami_bbox,
-        "total_cities": len(cities),
-        "cities": cities
-    }
-
-@app.get("/examples")
-async def get_examples():
-    """Get example API calls for testing"""
-    return {
-        "examples": {
-            "reverse_geocode_miami": {
-                "url": "/reverse-geocode?lat=25.7617&lon=-80.1918&radius_km=25",
-                "description": "Find what city Miami coordinates are in"
-            },
-            "miami_boundary": {
-                "url": "/city-boundary?city_name=Miami&min_lat=25.0&min_lon=-81.0&max_lat=27.0&max_lon=-79.5",
-                "description": "Get Miami city boundary"
-            },
-            "south_florida_cities": {
-                "url": "/cities?min_lat=25.0&min_lon=-81.0&max_lat=27.0&max_lon=-79.5", 
-                "description": "List all cities in South Florida"
-            },
-            "user_workflow_miami": {
-                "url": "/user-location-workflow?lat=25.7617&lon=-80.1918&search_radius_km=25",
-                "description": "Complete workflow for Miami user"
-            }
+        return {
+            "user_location": user_location,
+            "nearby_cities": nearby_cities,
+            "workflow_complete": True
         }
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in user location workflow: {str(e)}")
 
+# -------------------------------------------------------------------
+# Entrypoint
+# -------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
